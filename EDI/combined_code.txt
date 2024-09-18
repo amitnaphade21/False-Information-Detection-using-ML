@@ -1,0 +1,157 @@
+#1st cell
+import numpy as np
+import pandas as pd
+import re
+import os
+from nltk.corpus import stopwords
+from nltk.stem.porter import PorterStemmer
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.model_selection import train_test_split
+from sklearn.linear_model import LogisticRegression
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.svm import SVC
+from sklearn.naive_bayes import MultinomialNB
+from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, confusion_matrix
+import nltk
+import matplotlib.pyplot as plt
+import seaborn as sns
+from joblib import Parallel, delayed
+import joblib
+import multiprocessing
+
+#2nd cell
+# Downloading NLTK resources
+nltk.download('stopwords')
+
+
+#3rd cell
+import pandas as pd
+
+train_data = pd.read_csv('train.csv')  # Replace with your train dataset path
+
+
+# Combine author and title into 'content' column
+train_data['content'] = train_data['author'].fillna('') + ' ' + train_data['title'].fillna('')+' '+train_data['text'].fillna('')
+
+# Check the first 5 rows of the dataframe
+print(train_data.head())
+
+# Checking for missing values
+print(train_data.isnull().sum())
+
+# Fill NaN values with empty string
+train_data = train_data.fillna('')
+
+# Combine author, title, and text into 'content' column
+train_data['content'] = train_data['author'] + ' ' + train_data['title']+' '+train_data['text']
+
+
+#4th cell
+
+# Function for text preprocessing
+def preprocess_text(content):
+    port_stem = PorterStemmer()
+    content = re.sub('[^a-zA-Z]', ' ', content)
+    content = content.lower()
+    content = content.split()
+    content = [port_stem.stem(word) for word in content if not word in stopwords.words('english')]
+    content = ' '.join(content)
+    return content
+
+#5th cell
+# Applying text preprocessing
+train_data['content'] = train_data['content'].apply(preprocess_text)
+
+
+#6th cell
+# Separating data and labels
+X = train_data['content'].values
+Y = train_data['label'].values
+# Converting textual data to numerical data
+vectorizer = TfidfVectorizer()
+X = vectorizer.fit_transform(X)
+# Splitting the data into train and test sets
+X_train, X_test, Y_train, Y_test = train_test_split(X, Y, test_size=0.2, stratify=Y, random_state=2)
+
+#7th cell
+# Define models
+models = {
+    'Logistic Regression': LogisticRegression(),
+    'Random Forest': RandomForestClassifier(),
+    'SVM': SVC(),
+    'Naive Bayes': MultinomialNB()
+}
+
+#8th cell
+# Training and evaluating models
+results = {}
+for model_name, model in models.items():
+    # Train the model
+    model.fit(X_train, Y_train)
+    
+    # Predictions
+    Y_train_pred = model.predict(X_train)
+    Y_test_pred = model.predict(X_test)
+    
+    # Accuracy
+    train_accuracy = accuracy_score(Y_train, Y_train_pred)
+    test_accuracy = accuracy_score(Y_test, Y_test_pred)
+    
+    # Precision, Recall, F1-score
+    precision = precision_score(Y_test, Y_test_pred)
+    recall = recall_score(Y_test, Y_test_pred)
+    f1 = f1_score(Y_test, Y_test_pred)
+
+#9th cell
+ # Confusion matrix
+cm = confusion_matrix(Y_test, Y_test_pred)
+    
+results[model_name] = {
+        'Train Accuracy': train_accuracy,
+        'Test Accuracy': test_accuracy,
+        'Precision': precision,
+        'Recall': recall,
+        'F1 Score': f1,
+        'Confusion Matrix': cm
+    }
+
+
+#10th cell
+# Displaying results
+for model_name, result in results.items():
+    print(model_name)
+    for metric, score in result.items():
+        print(f"{metric}: {score}")
+    print("\n")
+
+#11th cell
+# Assuming you have already trained and saved your model and vectorizer
+import joblib
+# Save the model and vectorizer
+joblib.dump(model, 'logistic_regression_model.pkl')
+joblib.dump(vectorizer, 'tfidf_vectorizer.pkl')
+
+
+#12th cell
+
+# Visualization
+# Bar plot for accuracy
+accuracy_scores = {model_name: result['Test Accuracy'] for model_name, result in results.items()}
+plt.figure(figsize=(10, 6))
+plt.bar(accuracy_scores.keys(), accuracy_scores.values(), color=['blue', 'green', 'purple', 'orange'])
+plt.xlabel('Models')
+plt.ylabel('Accuracy')
+plt.title('Accuracy of Different Models')
+plt.ylim(0.8, 1.0)
+plt.show()
+
+# Confusion matrix heatmap
+plt.figure(figsize=(10, 8))
+for i, (model_name, result) in enumerate(results.items()):
+    plt.subplot(2, 2, i+1)
+    sns.heatmap(result['Confusion Matrix'], annot=True, cmap="Blues", fmt="d", cbar=False)
+    plt.title(model_name + ' Confusion Matrix')
+    plt.xlabel('Predicted')
+    plt.ylabel('Actual')
+plt.tight_layout()
+plt.show()
